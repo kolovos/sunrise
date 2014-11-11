@@ -1,0 +1,114 @@
+[%import "javautil.eol";%]
+package [%=dbc.ePackage.name%];
+
+import com.tinkerpop.blueprints.Vertex;
+import com.tinkerpop.blueprints.impls.orient.OrientBaseGraph;
+import com.tinkerpop.blueprints.impls.orient.OrientVertexType;
+import com.orientechnologies.orient.core.metadata.schema.OType;
+import com.orientechnologies.orient.core.metadata.schema.OClass;
+import com.orientechnologies.orient.core.sql.OCommandSQL;
+import com.tinkerpop.blueprints.Direction;
+
+public class [%=dbc.name%] {
+	
+	protected OrientBaseGraph graph = null;
+	
+	public [%=dbc.name%](OrientBaseGraph graph) {
+		this.graph = graph;
+	}
+	
+	public void createSchema() {
+		[%for (c in EClass.all.select(c|not c.isAnnotatedAs("db"))) { %]
+		OrientVertexType [%=c.name.ftlc()%]VertexType = graph.createVertexType("[%=c.name%]");
+		[%for (a in c.eAttributes.select(a|not a.isMany())){%]
+		[%=c.name.ftlc()%]VertexType.createProperty("[%=a.name%]", OType.[%=a.getOrientType()%]);
+		[%}%]
+		[%for (r in c.eReferences){%]
+		[%=c.name.ftlc()%]VertexType.createEdgeProperty(Direction.OUT, "[%=r.getEdgeName()%]").setOrdered(true);
+		[%}%]
+		[%}%]
+		[%for (c in EClass.all.select(c|not c.eSuperTypes.isEmpty())) { %]
+		[%=c.name.ftlc()%]VertexType.setSuperClass([%=c.eSuperTypes.first().name.ftlc()%]VertexType);
+		[%}%]
+		[%for (c in EClass.all.select(c|c.getIndices().notEmpty())) {%]
+		[%for (index in c.getIndices()) {%]
+		[%=c.name.ftlc()%]VertexType.createIndex("[%=index.getDetail("name")%]", OClass.INDEX_TYPE.[%=index.getDetail("type").toUpperCase()%], [%=index.getDetail("keys").split(",").collect(f|'"' + f.trim + '"').concat(", ")%]);
+		[%}%]
+		[%}%]
+	}
+	
+	[%for (c in EClass.all.select(c|not c.isAbstract() and not c.isAnnotatedAs("db"))) { %]
+	public [%=c.name%] create[%=c.name%]() {
+		return new [%=c.name%](graph, graph.addVertex("class:[%=c.name%]"));
+	}
+	
+	public [%=c.name%].Iterable get[%=c.name%]s() {
+		return new [%=c.name%].Iterable(graph, graph.getVerticesOfClass("[%=c.name%]"));
+	}
+	
+	[%}%]
+	[%for (c in EClass.all.select(c|c.getIndices().notEmpty())){%]
+	[%for (index in c.getIndices()){%]
+	[%var fields = index.getDetail("keys").split(",").collect(f|f.trim);%]
+	public [%=c.name%] find[%=index.getDetail("name").ftuc()%]([%=fields.collect(f|c.eAllAttributes.selectOne(a|a.name = f).getJavaType() + " " + f).concat(", ")%]) {
+		java.lang.Iterable<Vertex> iterable = graph.command(new OCommandSQL("select from [%=c.name%] where [%=fields.collect(f|f + " = ?").concat(" and ")%]")).execute([%=fields.concat(", ")%]);
+		java.util.Iterator<Vertex> iterator = iterable.iterator();
+		if (iterator.hasNext()) return new [%=c.name%](graph, iterator.next());
+		else return null;
+	}
+	[%}%]
+	
+	[%}%]
+	
+	public OrientBaseGraph getGraph() {
+		return graph;
+	}
+}
+[%
+operation EClass getIndices() : Collection(EAnnotation) {
+	return self.eAnnotations.select(a|a.source = "index");
+}
+%]
+[*
+import com.googlecode.pongo.runtime.*;
+import com.mongodb.*;
+[%if (c.isAnnotatedAs("customize")){%]
+[% out.setContentType("Java"); %]
+// protected region custom-imports on begin
+// protected region custom-imports end
+[%}%]
+
+public class [%=c.name%] extends PongoDB {
+	
+	public [%=c.name%]() {}
+	
+	public [%=c.name%](DB db) {
+		setDb(db);
+	}
+	
+	[%for (ref in c.eAllReferences.select(sf|sf.isMany and sf.isContainment)){%]
+	protected [%=ref.getJavaCollectionType()%] [%=ref.name%] = null;
+	[%}%]
+	
+	[%if (c.isAnnotatedAs("customize")){%]
+	[% out.setContentType("Java"); %]
+	// protected region custom-fields-and-methods on begin
+	// protected region custom-fields-and-methods end
+	[%}%]	
+	
+	[%for (ref in c.eAllReferences.select(sf|sf.isMany and sf.isContainment)){%]
+	public [%=ref.getJavaCollectionType()%] get[%=ref.name.ftuc()%]() {
+		return [%=ref.name%];
+	}
+	
+	[%}%]
+	
+	@Override
+	public void setDb(DB db) {
+		super.setDb(db);
+		[%for (ref in c.eAllReferences.select(sf|sf.isMany and sf.isContainment)){%]
+		[%=ref.name%] = new [%=ref.getJavaCollectionType()%](db.getCollection("[%=ref.getMongoCollectionName()%]"));
+		pongoCollections.add([%=ref.name%]);
+		[%}%]
+	}
+}*]

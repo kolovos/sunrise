@@ -1,0 +1,26 @@
+import "javautil.eol";
+import "ecoreutil.eol";
+
+pre {
+	var root = "../../io.dimitris.sunrise.tests/src/io/dimitris/sunrise/tests/blog/";
+}
+
+rule EClass2DBClass 
+	transform dbc : Ecore!EClass {
+
+	guard : dbc.isAnnotatedAs("db")
+
+	template : "eclass2dbclass.egl"
+
+	target : root + dbc.name + ".java"
+}
+
+rule EClass2Class 
+	transform c : Ecore!EClass {
+
+	guard : not c.isAnnotatedAs("db")
+
+	template : "eclass2class.egl"
+
+	target : root + c.name + ".java"
+}

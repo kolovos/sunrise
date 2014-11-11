@@ -1,0 +1,232 @@
+[%import "javautil.eol";%]
+[%import "ecoreutil.eol";%]
+
+package [%=c.ePackage.name%];
+import com.tinkerpop.blueprints.Vertex;
+import com.tinkerpop.blueprints.impls.orient.OrientBaseGraph;
+import com.tinkerpop.blueprints.Direction;
+import com.tinkerpop.blueprints.Edge;
+import com.tinkerpop.blueprints.impls.orient.OrientVertex;
+
+public [%=c.getAbstractModifier()%] class [%=c.name%] extends [%=c.getJavaExtends()%] {
+
+	[%if (c.eSuperTypes.isEmpty()){%]	
+	protected Vertex vertex = null;
+	protected OrientBaseGraph graph = null;
+	[%}%]
+	
+	public [%=c.name%](OrientBaseGraph graph, Vertex vertex) {
+		[%if (c.eSuperTypes.isEmpty()){%]
+		this.vertex = vertex;
+		this.graph = graph;
+		[%}else{%]
+		super(graph, vertex);
+		[%}%]
+	}
+	
+	public static [%=c.name%] create(OrientBaseGraph graph, Vertex vertex) {
+		OrientVertex orientVertex = (OrientVertex) vertex;
+		[%for (sc in EClass.all.select(sc|sc.eAllSuperTypes.includes(c) and not sc.isAbstract)){%]
+		if (orientVertex.getRecord().getClassName().equals("[%=sc.name%]")) return new [%=sc.name%](graph, vertex);
+		[%}%]
+		[%if(not c.isAbstract()){%]
+		return new [%=c.name%](graph, vertex);
+		[%}else{%]
+		return null;
+		[%}%]
+	}
+	
+	[%for (a in c.eAttributes) {%]
+	public [%=a.getJavaType()%] get[%=a.name.ftuc()%]() {
+		return vertex.getProperty("[%=a.name%]");
+	}
+	
+	public [%=c.name%] set[%=a.name.ftuc()%]([%=a.getJavaType()%] [%=a.name%]) {
+		vertex.setProperty("[%=a.name%]", [%=a.name%]);
+		return this;
+	}
+	
+	[%}%]
+	
+	[%for (r in c.eReferences.select(r|r.isMany())) {%]
+	public [%=r.eType.name%].Iterable get[%=r.name.ftuc()%]() {
+		return new [%=r.eType.name%].Iterable(graph, vertex.getVertices(Direction.OUT, "[%=r.getEdgeName()%]"));
+	}
+	
+	public [%=c.name%] add[%=r.name.ftuc()%]([%=r.eType.name%]... [%=r.name%]) {
+		for ([%=r.eType.name%] o : [%=r.name%]) {
+			vertex.addEdge("[%=r.getEdgeName()%]", o.getVertex());
+			[%if (r.eOpposite.isDefined()){%]
+			[%if (r.eOpposite.isMany()){%]
+			if (!o.get[%=r.eOpposite.name.ftuc()%]().contains(this)) {
+				o.add[%=r.eOpposite.name.ftuc()%](this);
+			}
+			[%}else{%]
+			if (!this.equals(o.get[%=r.eOpposite.name.ftuc()%]())) {
+				o.set[%=r.eOpposite.name.ftuc()%](this);
+			}
+			[%}%]
+			[%}%]
+		}
+		return this;
+	}
+	
+	public [%=c.name%] remove[%=r.name.ftuc()%]([%=r.eType.name%]... [%=r.name%]) {
+		for ([%=r.eType.name%] o : [%=r.name%]) {
+			for (Edge e : vertex.getEdges(Direction.OUT, "[%=r.getEdgeName()%]")) {
+				if (e.getVertex(Direction.IN).equals(o.getVertex())) graph.removeEdge(e);
+			}
+			[%if (r.eOpposite.isDefined()){%]
+			[%if (r.eOpposite.isMany()){%]
+			if (o.get[%=r.eOpposite.name.ftuc()%]().contains(this)) {
+				o.remove[%=r.eOpposite.name.ftuc()%](this);
+			}
+			[%}else{%]
+			if (this.equals(o.get[%=r.eOpposite.name.ftuc()%]())) {
+				o.unset[%=r.eOpposite.name.ftuc()%]();
+			}
+			[%}%]
+			[%}%]
+		}
+		return this;
+	}
+	
+	public [%=c.name%] clear[%=r.name.ftuc()%]() {
+		for ([%=r.eType.name%] o : get[%=r.name.ftuc()%]()) {
+			remove[%=r.name.ftuc()%](o);
+		}
+		return this;
+	}
+	[%}%]
+
+	[%for (r in c.eReferences.select(r|not r.isMany())) {%]
+	public [%=r.eType.name%] get[%=r.name.ftuc()%]() {
+		java.util.Iterator<Vertex> iterator = vertex.getVertices(Direction.OUT, "[%=r.getEdgeName()%]").iterator();
+		if (iterator.hasNext()) return [%=r.eType.name%].create(graph, iterator.next());
+		else return null;
+	}
+	
+	public [%=c.name%] set[%=r.name.ftuc()%]([%=r.eType.name%] [%=r.name%]) {
+		unset[%=r.name.ftuc()%]();
+		vertex.addEdge("[%=r.getEdgeName()%]", [%=r.name%].getVertex());
+		[%if (r.eOpposite.isDefined()){%]
+		[%if (r.eOpposite.isMany()){%]
+		if (![%=r.name%].get[%=r.eOpposite.name.ftuc()%]().contains(this)) {
+			[%=r.name%].add[%=r.eOpposite.name.ftuc()%](this);
+		}
+		[%}else{%]
+		if (!this.equals([%=r.name%].get[%=r.eOpposite.name.ftuc()%]())) {
+			[%=r.name%].set[%=r.eOpposite.name.ftuc()%](this);
+		}
+		[%}%]
+		[%}%]
+		return this;
+	}
+	
+	public [%=c.name%] unset[%=r.name.ftuc()%]() {
+		[%=r.eType.name%] temp = get[%=r.name.ftuc()%]();
+		for (Edge e : vertex.getEdges(Direction.OUT, "[%=r.getEdgeName()%]")) {
+			graph.removeEdge(e);
+		}
+		[%if (r.eOpposite.isDefined()){%]
+		[%if (r.eOpposite.isMany()){%]
+		if (temp != null && temp.get[%=r.eOpposite.name.ftuc()%]().contains(this)) {
+			temp.remove[%=r.eOpposite.name.ftuc()%](this);
+		}
+		[%}else{%]
+		if (this.equals(temp.get[%=r.eOpposite.name.ftuc()%]())) {
+			temp.unset[%=r.eOpposite.name.ftuc()%]();
+		}
+		[%}%]
+		[%}%]
+		return this;
+	}
+	
+	[%}%]
+	
+	public Vertex getVertex() {
+		return vertex;
+	}
+	
+	[%if (c.eSuperTypes.isEmpty()){%]
+	public void delete() {
+		graph.removeVertex(this.vertex);
+	}
+	[%}%]
+	
+	public boolean equals(Object o) {
+		return (o instanceof [%=c.name%]) && (vertex.equals((([%=c.name%])o).getVertex()));
+	}
+	
+	public static class Iterable implements java.lang.Iterable<[%=c.name%]> {
+		
+		protected java.lang.Iterable<Vertex> iterable = null;
+		protected OrientBaseGraph graph = null;
+		
+		public Iterable(OrientBaseGraph graph, java.lang.Iterable<Vertex> iterable) {
+			this.iterable = iterable;
+			this.graph = graph;
+		}
+		
+		@Override
+		public java.util.Iterator<[%=c.name%]> iterator() {
+			return new [%=c.name%].Iterator(graph, iterable.iterator());
+		}
+		
+		public int size() {
+			int size = 0;
+			java.util.Iterator<?> iterator = iterator();
+			while (iterator.hasNext()) { size++; iterator.next(); }
+			return size;
+		}
+		
+		public [%=c.name%] get(int i) {
+			int index = 0;
+			for ([%=c.name%] o : this) {
+				if (index == i) return o;
+				else index++;
+			}
+			return null;
+		}
+		
+		public [%=c.name%] first() {
+			return get(0);
+		}
+		
+		public boolean contains([%=c.name%] [%=c.name.ftlc%]) {
+			for ([%=c.name%] it : this) {
+				if (it.equals([%=c.name.ftlc%])) return true;
+			}
+			return false;
+		}
+		
+	}
+	
+	public static class Iterator implements java.util.Iterator<[%=c.name%]> {
+		
+		protected java.util.Iterator<Vertex> iterator = null;
+		protected OrientBaseGraph graph = null;
+		
+		public Iterator(OrientBaseGraph graph, java.util.Iterator<Vertex> iterator) {
+			this.iterator = iterator;
+			this.graph = graph;
+		}
+		
+		@Override
+		public boolean hasNext() {
+			return iterator.hasNext();
+		}
+
+		@Override
+		public [%=c.name%] next() {
+			return create(graph, iterator.next());
+		}
+
+		@Override
+		public void remove() {
+			throw new UnsupportedOperationException();
+		}
+		
+	}
+
+}
